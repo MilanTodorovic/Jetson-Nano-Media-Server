@@ -42,6 +42,67 @@ RUN \
     libssl1.1 \
     xmlstarlet && \
   apt-get install -y --no-install-recommends \
+    alsa-lib-dev \
+    aom-dev \
+    bzip2-dev \
+    coreutils \
+    cunit-dev \
+    dav1d-dev \
+    fdk-aac-dev \
+    ffmpeg-libs \
+    fontconfig-dev \
+    freetype-dev \
+    fribidi-dev \
+    gmp-dev \
+    imlib2-dev \
+    intel-media-driver-dev \
+    intel-media-sdk-dev \
+    ladspa-dev \
+    lame-dev \
+    libass-dev \
+    libbluray-dev \
+    libchromaprint-dev \
+    libchromaprint-tools \
+    libdrm-dev \
+    libharfbuzz-dev \
+    libogg-dev \
+    libopenmpt-dev \
+    libplacebo-dev \
+    libpng-dev \
+    librist-dev \
+    libsrt-dev \
+    libtheora-dev \
+    libtool \
+    libva-dev \
+    libva-intel-driver \
+    libvdpau-dev \
+    libvdpau1 \
+    libvorbis-dev \
+    libvpx-dev \
+    libwebp-dev \
+    libxml2-dev \
+    lilv-dev \
+    mesa-dev \
+    nasm \
+    opencl-dev \
+    openssl-dev \
+    opus-dev \
+    patch \
+    perl-dev \
+    rav1e-dev \
+    shaderc-dev \
+    svt-av1-dev \
+    util-linux-dev \
+    v4l-utils-dev \
+    vulkan-loader-dev \
+    vulkan-headers \
+    vulkan-tools \
+    x264-dev \
+    x265-dev \
+    xz-dev \
+    zimg-dev \
+    zlib-dev \
+  apt-get install -y --no-install-recommends \
     jellyfin=${JELLYFIN_RELEASE} && \
   echo "**** cleanup ****" && \
   rm -rf \
@@ -59,7 +120,8 @@ RUN \
   mv /usr/lib/jellyfin-ffmpeg/ffprobe /usr/lib/jellyfin-ffmpeg/ffprobe.old
 
 # Copy all both ffmpeg and ffprobe into the new destination
-COPY $PATH_TO_FFMPEG/bin/. /usr/lib/jellyfin-ffmpeg/bin/
+# This doesn't work outside of the build context, aka the current directiry
+COPY $PATH_TO_FFMPEG/bin/ /usr/lib/jellyfin-ffmpeg/bin/
 
 # Copy and rename the warpper
 COPY scripts/ffmpeg-jetson-wrapper /usr/lib/jellyfin-ffmpeg/ffmpeg
