@@ -9,7 +9,7 @@
 FROM ghcr.io/linuxserver/baseimage-ubuntu:arm64v8-focal
 
 # set version label
-ARG JELLYFIN_RELEASE=10.11.6
+ARG JELLYFIN_RELEASE
 LABEL maintainer="MilanTodorovic"
 
 # environment settings
@@ -101,7 +101,7 @@ RUN \
     x265-dev \
     xz-dev \
     zimg-dev \
-    zlib-dev \
+    zlib-dev && \
   apt-get install -y --no-install-recommends \
     jellyfin=${JELLYFIN_RELEASE} && \
   echo "**** cleanup ****" && \
