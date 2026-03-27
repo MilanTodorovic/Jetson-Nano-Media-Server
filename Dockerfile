@@ -8,174 +8,236 @@
 #   https://github.com/NVIDIA/nvidia-container-toolkit/issues/137
 FROM ghcr.io/linuxserver/baseimage-ubuntu:arm64v8-focal
 
-# set version label
-ARG JELLYFIN_RELEASE
-LABEL maintainer="MilanTodorovic"
+ENV TZ=Etc/UTC \
+    DEBIAN_FRONTEND=noninteractive \
+    NVIDIA_DRIVER_CAPABILITIES="compute,video,utility" \
+    # https://github.com/dlemstra/Magick.NET/issues/707#issuecomment-785351620
+    MALLOC_TRIM_THRESHOLD_=131072 \
+    ATTACHED_DEVICES_PERMS="/dev/dri /dev/dvb /dev/vchiq /dev/vc-mem /dev/video1? -type c"
 
-# environment settings
-ARG DEBIAN_FRONTEND="noninteractive"
-ENV NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
-# https://github.com/dlemstra/Magick.NET/issues/707#issuecomment-785351620
-ENV MALLOC_TRIM_THRESHOLD_=131072
-ENV ATTACHED_DEVICES_PERMS="/dev/dri /dev/dvb /dev/vchiq /dev/vc-mem /dev/video1? -type c"
+# Install systemd
+RUN apt update && apt install -y systemd && \
+# Update apt mirrors
+# Nvidia required packages
+    echo "deb http://ports.ubuntu.com/ubuntu-ports/ bionic main" >> /etc/apt/sources.list && \
+    apt update && apt install -y \
+        libgles2 \
+        libpangoft2-1.0-0 \
+        libxkbcommon0 \
+        libwayland-egl1 \
+        libwayland-cursor0 \
+        libunwind8 \
+        libasound2 \
+        libpixman-1-0 \
+        libjpeg-turbo8 \
+        libinput10 \
+        libcairo2 \
+        device-tree-compiler \
+        iso-codes \
+        libffi6 \
+        libncursesw5 \
+        libdrm-common \
+        libdrm2 \
+        libegl-mesa0 \
+        libegl1 \
+        libegl1-mesa \
+        libgtk-3-0 \
+        python2 \
+        python-is-python2 \
+        libgstreamer1.0-0 \
+        libgstreamer-plugins-bad1.0-0 \
+        i2c-tools \
+        bridge-utils && \
+# Additional tools
+    apt install -y \
+        bash-completion \
+        build-essential \
+        btrfs-progs \
+        ca-certificates \
+        cmake \
+        curl \
+        dnsutils \
+        gnupg2 \
+        htop \
+        iotop \
+        isc-dhcp-client \
+        iputils-ping \
+        kmod \
+        linux-firmware \
+        locales \
+        net-tools \
+        netplan.io \
+        pciutils \
+        python3-dev \
+        samba \
+        ssh \
+        sudo \
+        udev \
+        unzip \
+        usbutils \
+        neovim \
+        wpasupplicant \
+        parted \
+        gdisk \
+        e2fsprogs \
+        mtd-utils
 
+# Add Nvidia specific repos
+RUN curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+    && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    tee /etc/apt/sources.list.d/nvidia-container-toolkit.list && \
+    echo "deb https://repo.download.nvidia.com/jetson/common r32.7 main" >> /etc/apt/sources.list.d/nvidia-l4t-apt-source.list && \
+    echo "deb https://repo.download.nvidia.com/jetson/t210 r32.7 main" >> /etc/apt/sources.list.d/nvidia-l4t-apt-source.list && \
+    # Nvidia containers
+    apt update && apt install -y \
+        docker.io \
+        docker-compose-v2 \
+        libnvidia-container-tools \
+        libnvidia-container1:arm64 \
+        nvidia-container-toolkit-base \
+        nvidia-container-toolkit \
+        nvidia-docker2 \
+        nvidia-l4t-multimedia \
+        nvidia-l4t-multimedia-utils \
+        cuda-toolkit-10-2 && \
+# Configure Docker file with Nvidia's parameters
+    nvidia-ctk runtime configure --runtime=docker && \
+    sudo apt update && sudo apt -y install \
+        autoconf \
+        automake \
+        clang \
+        git-core \
+        gnutls-bin \
+        libass-dev \
+        libbluray-dev \
+        libchromaprint-dev \
+        libchromaprint-tools \
+        libfreetype6-dev \
+        libgmp-dev \
+        libgnutls28-dev \
+        libmp3lame-dev \
+        libtool \
+        libvorbis-dev \
+        libmp3lame-dev \
+        libopenmpt-dev \
+        libopus-dev \
+        libfdk-aac-dev \
+        meson \
+        ninja-build \
+        pkg-config \
+        opencl-headers \
+        ocl-icd-opencl-dev \
+        libtheora-dev \
+        libvpx-dev \
+        libwebp-dev \
+        libx264-dev \
+        libx265-dev \
+        libzvbi-dev \
+        libdrm-dev \
+        texinfo \
+        wget \
+        yasm \
+        zlib1g-dev && \
+        pkg-config --modversion gnutls
+
+RUN wget -q https://github.com/pythops/tegratop/releases/latest/download/tegratop-linux-arm64 -O /usr/local/bin/tegratop && \
+    chmod +x /usr/local/bin/tegratop && \
+    wget https://repo.download.nvidia.com/jetson/t210/pool/main/n/nvidia-l4t-jetson-multimedia-api/nvidia-l4t-jetson-multimedia-api_32.7.6-20241104234540_arm64.deb && \
+    dpkg -i nvidia-l4t-jetson-multimedia-api_32.7.6-20241104234540_arm64.deb && \
+    rm nvidia-l4t-jetson-multimedia-api_32.7.6-20241104234540_arm64.deb
+
+# Installing Jellyfin and stuff
 RUN \
-  echo "**** adding nvidia sources to apt ****" && \
-  echo 'deb http://ports.ubuntu.com/ubuntu-ports/ bionic main' >> /etc/apt/sources.list && \
-  echo 'deb https://repo.download.nvidia.com/jetson/common r32.7 main' >> /etc/apt/sources.list.d/nvidia-l4t-apt-source.list && \
-  echo 'deb https://repo.download.nvidia.com/jetson/t210 r32.7 main' >> /etc/apt/sources.list.d/nvidia-l4t-apt-source.list && \
-  echo "**** install prerequisties ****" && \
-  apt-get update && \
-  apt-get install -y --no-install-recommends \
-    gnupg && \
-  echo "**** install jellyfin key*****" && \
-  curl -s https://repo.jellyfin.org/ubuntu/jellyfin_team.gpg.key | apt-key add - && \
-  echo 'deb [arch=arm64] https://repo.jellyfin.org/ubuntu focal main' > /etc/apt/sources.list.d/jellyfin.list && \
-  echo "**** install packages ****" && \
+  curl -s https://repo.jellyfin.org/ubuntu/jellyfin_team.gpg.key | gpg --dearmor | tee /usr/share/keyrings/jellyfin.gpg >/dev/null && \
+  echo 'deb [arch=arm64 signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/ubuntu noble main' > /etc/apt/sources.list.d/jellyfin.list && \
+  if [ -z ${JELLYFIN_RELEASE+x} ]; then \
+    JELLYFIN_RELEASE=$(curl -sX GET https://repo.jellyfin.org/ubuntu/dists/noble/main/binary-amd64/Packages |grep -A 7 -m 1 'Package: jellyfin-server' | awk -F ': ' '/Version/{print $2;exit}'); \
+  fi && \
   apt-get update && \
   apt-get install -y --no-install-recommends \
     at \
-    libfontconfig1 \
-    libfreetype6 \
     libjemalloc2 \
     libomxil-bellagio0 \
     libomxil-bellagio-bin \
     libraspberrypi0 \
-    libssl1.1 \
     xmlstarlet && \
-# Installing FFmpeg dependencies
   apt-get install -y --no-install-recommends \
-    libass9 \
-    libasound2 \
-    libbz2-1.0 \
-    libc6 \
-    libchromaprint1 \
-    libdrm-common \
-    libdrm2 \
-    libfontconfig1 \
-    libfreetype6 \
-    libfribidi0 \
-    libharfbuzz0b \
-    libopenmpt0 \
-    libva2 \
-    libxml2 \
-    libbluray2 \
-    libgmp10 \
-    libgnutls30 \
-    libvpx6 \
-    libwebpmux3 \
-    libwebp6 \
-    liblzma5 \
-    libzvbi0 \
-    libfdk-aac1 \
-    libmp3lame0 \
-    libopus0 \
-    libtheora0 \
-    libvorbis0a \
-    libvorbisenc2 \
-    libx264-155 \
-    libx265-179 \
-    libva-drm2 \
-    libvdpau1 \
-    libx11-6 \
-    libglib2.0-0 \
-    libgraphite2-3 \
-    libstdc++6 \
-    libgcc-s1 \
-    libexpat1 \
-    libuuid1 \
-    libpng16-16 \
-    libicu66 \
-    libmpg123-0 \
-    libvorbisfile3 \
-    libavcodec58 \
-    libavutil56 \
-    libp11-kit0 \
-    libidn2-0 \
-    libunistring2 \
-    libtasn1-6 \
-    libnettle7 \
-    libhogweed5 \
-    libogg0 \
-    libcairo2 \
-    libnuma1 \
-    libxext6 \
-    libxcb1 \
-    libpcre3 \
-    libswresample3 \
-    librsvg2-2 \
-    libsnappy1v5 \
-    libaom0 \
-    libcodec2-0.9 \
-    libgsm1 \
-    libopenjp2-7 \
-    libshine3 \
-    libspeex1 \
-    libtwolame0 \
-    libwavpack1 \
-    libxvidcore4 \
-    libva-x11-2 \
-    libffi7 \
-    libegl1 \
-    libpixman-1-0 \
-    libxcb-shm0 \
-    libxcb-render0 \
-    libxrender1 \
-    libxau6 \
-    libxdmcp6 \
-    libsoxr0 \
-    libcairo-gobject2 \
-    libgdk-pixbuf2.0-0 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libpangoft2-1.0-0 \
-    libxfixes3 \
-    libglvnd0 \
-    libbsd0 \
-    libgomp1 \
-    libmount1 \
-    libselinux1 \
-    libthai0 \
-    libblkid1 \
-    libpcre2-8-0 \
-    libdatrie1 \
-    nvidia-l4t-core \
-    nvidia-l4t-multimedia \
-    nvidia-l4t-multimedia-utils \
-    ocl-icd-libopencl1 \
-    zlib1g && \
-  wget https://repo.download.nvidia.com/jetson/t210/pool/main/n/nvidia-l4t-jetson-multimedia-api/nvidia-l4t-jetson-multimedia-api_32.7.6-20241104234540_arm64.deb && \
-  dpkg -i nvidia-l4t-jetson-multimedia-api_32.7.6-20241104234540_arm64.deb && \
-  
-  if [ -z ${JELLYFIN_RELEASE+x} ]; then \
-    JELLYFIN_RELEASE=$(curl -sX GET https://repo.jellyfin.org/ubuntu/dists/focal/main/binary-arm64/Packages |grep -A 7 -m 1 'Package: jellyfin-server' | awk -F ': ' '/Version/{print $2;exit}'); \
-  fi && \
-  apt-get install -y --no-install-recommends \
-    jellyfin=${JELLYFIN_RELEASE} && \
-  echo "**** cleanup ****" && \
-  rm -rf \
+    jellyfin=${JELLYFIN_RELEASE}
+
+# FFmpeg stuff
+RUN git clone --depth=1 https://github.com/Keylost/jetson-ffmpeg.git && \
+    git clone --depth=1 https://github.com/jellyfin/jellyfin-ffmpeg.git && \
+    git clone --depth=1 https://code.videolan.org/videolan/dav1d.git && \
+    git clone --depth=1 https://gitlab.com/AOMediaCodec/SVT-AV1.git && \
+    git clone --depth=1 https://git.videolan.org/git/ffmpeg/nv-codec-headers.git && \
+    git clone --depth=1 --recurse-submodules https://github.com/sekrit-twc/zimg.git && \
+    wget https://code.ffmpeg.org/FFmpeg/FFmpeg/pulls/21567.patch && \
+    wget https://raw.githubusercontent.com/mattangus/jellyfin/refs/heads/master/scripts/ffmpeg-jetson-wrapper
+
+# Make and install all additional dependencies
+# TODO: CONFIGURE INSTALLATION PATH AS IT IS NOT EMPTY
+RUN echo "Building zimg" && \
+    cd zimg/ && \
+    git submodule update --init --recursive && \
+    ./autogen.sh && \
+    ./configure && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && \
+    echo "Building dav1d" && \
+    cd dav1d/ && \
+    meson build && \
+    cd build && \
+    ninja && ninja install && \
+    cg / && \
+    echo "Building svt-av1" && \
+    cd SVT-AV1/Build/linux && \
+    ./build.sh release && \
+    cd Release && make install && \
+    chmod +x /usr/local/bin/SvtAv1EncApp && \
+    cd / && \
+    echo "Building nv-codec-headers" && \
+    cd nv-codec-headers/ && \
+    make install && \
+    cd / && \
+    echo "Patching jellyfin-ffmpeg" && \
+    mv ./21567.patch jellyfin-ffmpeg/ && \
+    cd jellyfin-ffmpeg/ && \
+    git apply ./21567.patch && \
+    cd / && \
+    echo "Changing ffmpeg and ffprobe to ffmpeg.old and ffprobe.old" && \
+    mv /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg.old && \
+    mv /usr/lib/jellyfin-ffmpeg/ffprobe /usr/lib/jellyfin-ffmpeg/ffmprobe.old && \
+    echo "Setting up jetson-ffmpeg" && \
+    cd jetson-ffmpeg/ && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    echo "Compiling jellyfin-ffmpeg" && \
+    ./configure --prefix=/usr/lib/jellyfin-ffmpeg --target-os=linux --extra-version=Jellyfin --disable-static --enable-shared --enable-nonfree --disable-doc --disable-ffplay --disable-libxcb --disable-sdl2 --disable-xlib --enable-lto=auto --enable-gpl --enable-version3  --enable-gmp --enable-gnutls --enable-chromaprint --enable-opencl --enable-libdrm --enable-libxml2 --enable-libass --enable-libfreetype --enable-libfribidi --enable-libfontconfig --enable-libharfbuzz --enable-libbluray --enable-libmp3lame --enable-libopus --enable-libtheora --enable-libvorbis --enable-libopenmpt --enable-libdav1d --enable-libsvtav1 --enable-libwebp --enable-libvpx --enable-libx264 --enable-libx265 --enable-libzvbi --enable-libzimg --enable-libfdk-aac --arch=arm64 --toolchain=hardened  --enable-ffnvcodec --enable-cuda --enable-cuda-llvm --extra-cflags="-I/usr/local/cuda/include" --extra-ldflags=-L/usr/local/cuda/lib64 --enable-cuvid --enable-nvdec --enable-nvenc --enable-nvmpi && \
+    make -j$(nproc) && make install && \
+    mv /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg.new && \
+    mv /usr/lib/jellyfin-ffmpeg/ffprobe /usr/lib/jellyfin-ffmpeg/ffmprobe.new && \
+    chmod +x /usr/lib/jellyfin-ffmpeg/ffmpeg.new && \
+    chmod +x /usr/lib/jellyfin-ffmpeg/ffprobe.new && \
+    cd / && \
+    chmod +x ./ffmpeg-jetson-wrapper && \
+    mv ./ffmpeg-jetson-wrapper ./ffmpeg && \
+    sed 's/ffprobe/ffprobe.new/' ./ffmpeg && \
+    sed 's/ffmpeg/ffmpeg.new/' ./ffmpeg && \
+    mv ./ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg
+
+RUN  rm -rf \
     /tmp/* \
     /var/lib/apt/lists/* \
     /var/tmp/*
 
 # add local files
-COPY root/ / 
-
-# Make a new directory and rename existing files
-RUN \
-  mkdir /usr/lib/jellyfin-ffmpeg/bin && \
-  mv /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg.old && \
-  mv /usr/lib/jellyfin-ffmpeg/ffprobe /usr/lib/jellyfin-ffmpeg/ffprobe.old
-
-# Copy all both ffmpeg and ffprobe into the new destination
-# This doesn't work outside of the build context, aka the current directiry
-COPY $PATH_TO_FFMPEG/bin/ /usr/lib/jellyfin-ffmpeg/bin/
-
-# Copy and rename the warpper
-COPY scripts/ffmpeg-jetson-wrapper /usr/lib/jellyfin-ffmpeg/ffmpeg
-
-# Make it executable
-RUN chmod +x /usr/lib/jellyfin-ffmpeg/ffmpeg
+COPY root/ /
 
 # ports and volumes
 EXPOSE 8096 8920
