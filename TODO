@@ -1,6 +1,0 @@
-To compile:
-
-libSvtAv1Enc.so.4
-libzimg
-dav1d
-libnvmpi.so.1 -> vrv iz ffmpeg-patcha
